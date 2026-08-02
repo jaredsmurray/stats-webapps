@@ -1,0 +1,16 @@
+---
+title: "Statistics Web Apps"
+---
+
+Interactive apps for *Introduction to Statistics and Data Science*. Each one runs
+entirely in your browser, so nothing needs to be installed and the first load
+takes a few moments.
+
+- [Sampling Distribution Explorer](sap_sampling.qmd) --- draw samples from a
+  simulated population of customer ROE values and watch the sampling
+  distribution of the sample mean build up.
+- [Bootstrap Explorer](sap_bootstrap.qmd) --- resample one real sample of 81
+  firms with replacement and see the bootstrap approximation to that same
+  sampling distribution.
+- [Bagging Explorer](bagging.qmd) --- fit a regression tree to each of many
+  resamples and watch the average of the trees settle into a stable curve.

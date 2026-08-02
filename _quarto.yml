@@ -1,0 +1,20 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Statistics Web Apps"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Apps
+      - href: https://jaredsmurray.github.io/intro-stats/
+        text: Book
+
+format:
+  html:
+    theme: cosmo
+    toc: false
+
+filters:
+  - shinylive
