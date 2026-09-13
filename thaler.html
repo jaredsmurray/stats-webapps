@@ -6,9 +6,9 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="description" content="Sampling from a simulated population of 30,000 companies.">
+<meta name="description" content="Independent projects that earn $2 million or lose $1 million, each with probability 0.5.">
 
-<title>Sampling distributions: SAP customer ROE – Statistics Web Apps</title>
+<title>Thaler’s investment example – Statistics Web Apps</title>
 <style>
 /* Default styles provided by pandoc.
 ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
@@ -126,12 +126,12 @@ ul.task-list li input[type="checkbox"] {
 
 <header id="title-block-header" class="quarto-title-block default">
 <div class="quarto-title">
-<h1 class="title">Sampling distributions: SAP customer ROE</h1>
+<h1 class="title">Thaler’s investment example</h1>
 </div>
 
 <div>
   <div class="description">
-    Sampling from a simulated population of 30,000 companies.
+    Independent projects that earn $2 million or lose $1 million, each with probability 0.5.
   </div>
 </div>
 
@@ -151,150 +151,115 @@ ul.task-list li input[type="checkbox"] {
 <pre class="shinylive-r" data-engine="r"><code>#| '!! shinylive warning !!': |
 #|   shinylive does not work in self-contained HTML documents.
 #|   Please set `embed-resources: false` in your metadata.
-#| viewerHeight: 1120
+#| viewerHeight: 850
 #| standalone: true
-# Sampling distribution of the sample mean: return on equity (ROE) at SAP
-#
-# Base-graphics version embedded by sap_sampling.qmd. Keep its population,
-# controls, and simulation behavior aligned with the local ggplot app.R.
-#
-# Run from the webapps project with
-# shiny::runApp("apps/sap_sampling/app_shinylive.R").
+# The Thaler bet: N independent investments, each paying +$2M with
+# probability 1/2 or -$1M with probability 1/2. This app simulates whole
+# portfolios one at a time (or many at once) and builds up the distribution
+# of total payoffs (or of the proportion of profitable investments).
+# The number of investments N is adjustable. Run locally with shiny::runApp().
 
 library(shiny)
 library(bslib)
+library(ggplot2)
 
-# --- Data ---------------------------------------------------------------
-# 81 ROE values, a frozen bootstrap resample of SAP customers drawn by
-# working/sapsim.R from working/sap.csv. The resample was generated without a
-# seed and cannot be regenerated, so the values are inlined here verbatim (full
-# precision, extracted from working/sap_resample.csv). Do NOT regenerate.
-SAP_ROE &lt;- c(
-  -0.120396544, -0.100691091, 0.167590054, 0.137871816, -0.008553021, 0.137871816,
-  0.125869109, 0.029765192, -0.044352879, 0.252452635, 0.181038292, -0.023422169,
-  0.048956074, 0.127671050, 0.410341235, 0.258652282, 0.034964973, 0.258652282,
-  0.256746830, -0.100691091, 0.129724225, 0.034964973, 0.803444112, 0.258652282,
-  0.803444112, 0.167590054, -0.018913042, 0.509901026, 0.388392828, 0.148384173,
-  0.167590054, 0.627228636, -0.083626775, 0.357408018, 0.188396498, 0.009950306,
-  0.012788839, 0.448264021, -0.083626775, 0.033139821, 0.129724225, 0.380798900,
-  -0.095886669, 0.009950306, -0.018913042, 0.048956074, -0.045643574, 0.027237541,
-  0.200929684, 0.006652830, -0.023422169, 0.076985554, 0.027237541, -0.045643574,
-  0.137871816, 0.048956074, -0.038963332, 0.127671050, 0.033574695, -0.074997475,
-  0.129724225, 0.240981928, 0.001447413, 0.181038292, 0.188396498, -0.100691091,
-  0.132512837, 0.236645754, 0.252452635, 0.200929684, 0.803444112, -0.042335084,
-  0.034964973, 0.258652282, -0.044352879, -0.097850051, 0.188643477, 0.015643796,
-  0.057244759, -0.038963332, -0.014643583
-)
-stopifnot(length(SAP_ROE) == 81)
+# Fixed per-investment payoffs
+WIN  &lt;-  2              # payoff of a profitable investment, in $M
+LOSS &lt;- -1              # payoff of an unprofitable investment, in $M
+SPACING &lt;- 3            # gap between adjacent possible totals ($M): WIN - LOSS
 
-# --- Fake population (built once at startup) ---------------------------
-# Smooth the 81 resampled values with a Gaussian kernel (bandwidth from the
-# Silverman default) to make a plausible continuous population. Any draw below
-# -1 (a hard ROE floor) is rejected and redrawn; the loop essentially never
-# fires -- it is only a guard.
-set.seed(2026)
-KDE_BW &lt;- density(SAP_ROE)$bw            # about 0.0601
-M_POP  &lt;- 30000
-pop &lt;- sample(SAP_ROE, M_POP, replace = TRUE) + rnorm(M_POP, 0, KDE_BW)
-bad &lt;- which(pop &lt; -1)
-while (length(bad) &gt; 0) {
-  pop[bad] &lt;- sample(SAP_ROE, length(bad), replace = TRUE) +
-    rnorm(length(bad), 0, KDE_BW)
-  bad &lt;- which(pop &lt; -1)
-}
-# Display in percent (12.6 rather than 0.126), matching the chapter's units.
-pop &lt;- 100 * pop
-POP_MEAN &lt;- mean(pop)
-POP_SD   &lt;- sd(pop)
-POP_XLIM &lt;- range(pop)
+# How many tiles to show per row in the current-portfolio strip
+TILES_PER_ROW &lt;- 12
 
-# --- Colors -------------------------------------------------------------
-bar_color    &lt;- "#0173B2"   # blue: distribution / sample bars
-mean_color   &lt;- "grey30"    # solid line at the population mean
-normal_color &lt;- "#9370DB"   # purple: normal approximation
-mark_color   &lt;- "#CC0000"   # red X marking the current sample mean
-hit_color    &lt;- "#2E8B57"   # sea green: this sample's CI captures mu
-miss_color   &lt;- "#CC0000"   # red: this sample's CI misses mu
-
-pct_axis &lt;- function() {
-  at &lt;- pretty(POP_XLIM, n = 6)
-  axis(1, at = at, labels = paste0(at, "%"))
-}
-
-stats_box &lt;- function(lines) {
-  usr &lt;- par("usr")
-  text(usr[2] - 0.02 * diff(usr[1:2]), usr[4] - 0.05 * diff(usr[3:4]),
-       paste(lines, collapse = "\n"), adj = c(1, 1), cex = 1.05, font = 2,
-       col = "gray20")
-}
+# Colorblind-safe colors
+win_color  &lt;- "#009E73"   # green for +$2M
+loss_color &lt;- "#D55E00"   # red for -$1M
+bar_color  &lt;- "#0173B2"   # blue for the distribution bars
+normal_color &lt;- "#9370DB" # purple for the normal curve
 
 ui &lt;- page_sidebar(
-  title = "Sampling distributions: SAP customer ROE",
+  title = "Thaler's investment example",
 
+  # Consistent font across the app and its plots
   tags$head(
     tags$style(HTML("
-      * { font-family: 'Arial', 'Helvetica', sans-serif !important; }
+      * {
+        font-family: 'Arial', 'Helvetica', sans-serif !important;
+      }
+      text {
+        font-family: 'Arial', 'Helvetica', sans-serif !important;
+      }
     "))
   ),
 
   sidebar = sidebar(
     width = 300,
 
-    sliderInput("n", "Sample size (n):",
-                min = 1, max = 100, value = 25, step = 1, ticks = FALSE),
-    numericInput("n_typed", "Sample size (typed):",
-                 value = 25, min = 1, max = 100, step = 1),
+    p("Each project independently earns $2 million or loses $1 million, each with probability 0.5."),
 
+    # Number of independent investments
+    sliderInput("n_proj", "Number of projects (N):",
+                min = 1, max = 50, value = 23, step = 1, ticks = FALSE),
+
+    # Required wins for an overall profit
+    uiOutput("required_wins"),
+
+    # Simulate a single portfolio
+    actionButton("sim_one", "Simulate 1 portfolio",
+                 class = "btn-primary",
+                 style = "margin-bottom: 5px; width: 100%;"),
+
+    # Simulate many portfolios at once
     div(
-      style = "margin-top: 10px;",
-      actionButton("take_one", "Take 1 sample",
-                   class = "btn-primary",
-                   style = "margin-bottom: 5px; width: 100%;"),
-      div(
-        style = "margin-bottom: 10px;",
-        numericInput("k", label = "Number of samples", value = 50, min = 1, max = 10000,
-                     width = "100%"),
-        actionButton("take_many", "Take many samples",
-                     style = "width: 100%;")
-      ),
-      actionButton("clear", "Clear history",
-                   class = "btn-outline-secondary",
-                   style = "width: 100%; margin-bottom: 10px;")
+      style = "margin-bottom: 10px;",
+      numericInput("k", label = "Number of portfolios", value = 50, min = 1, max = 10000,
+                   width = "100%"),
+      actionButton("sim_many", "Simulate many",
+                   style = "width: 100%;")
     ),
 
-    checkboxInput("show_normal", "Show normal approximation", value = FALSE),
-    checkboxInput("show_ci", "Show approximate 95% confidence interval", value = FALSE),
+    # Clear everything and start over
+    actionButton("clear", "Clear history",
+                 class = "btn-outline-secondary",
+                 style = "width: 100%; margin-bottom: 10px;"),
 
-    sliderInput("bw_means", "Bin width (percentage points):",
-                min = 0.1, max = 5, value = 0.5, step = 0.1,
-                ticks = FALSE)
+    # Overlay the normal approximation on the distribution plot
+    checkboxInput("show_normal", "Show normal approximation", value = FALSE),
+
+    # Switch the bottom panel to the proportion of profitable investments
+    checkboxInput("show_prop", "Show proportion of profitable projects", value = FALSE),
+    conditionalPanel(
+      condition = "input.show_prop == true",
+      div(
+        style = "margin-left: 22px;",
+        checkboxInput("as_percent", "Label axis as percent", value = FALSE)
+      )
+    ),
+
+    # Highlight the portfolios that lost money
+    checkboxInput("show_loss", "Highlight losing portfolios", value = FALSE)
   ),
 
+  # Main area: current portfolio on top, distribution below
   layout_columns(
     col_widths = c(12),
+    row_heights = c("40%", "60%"),
 
     card(
-      card_header("Population of ROE values (simulated)"),
-      plotOutput("pop_plot", height = "260px")
+      card_header("This portfolio"),
+      div(
+        style = "font-size: 0.95em; padding: 2px 8px; min-height: 1.3em; color: #333;",
+        textOutput("portfolio_summary")
+      ),
+      plotOutput("portfolio_plot", height = "100%")
     ),
 
     card(
-      card_header("Current sample"),
-      plotOutput("sample_plot", height = "230px")
-    ),
-
-    card(
-      card_header("Sampling distribution of the sample mean"),
-      plotOutput("dist_plot", height = "300px"),
+      card_header(textOutput("dist_title")),
+      plotOutput("dist_plot", height = "100%"),
       card_footer(
         style = "font-size: 0.9em;",
-        textOutput("n_samples"),
-        conditionalPanel(
-          condition = "input.show_ci",
-          style = "font-size: 0.85em; margin-top: 4px;",
-          HTML("&lt;span style='color: #2E8B57;'&gt;Green&lt;/span&gt;: this sample's interval
-                captures &amp;mu;; &lt;span style='color: #CC0000;'&gt;red&lt;/span&gt;: it misses")
-        )
+        textOutput("n_simulated")
       )
     )
   )
@@ -302,192 +267,249 @@ ui &lt;- page_sidebar(
 
 server &lt;- function(input, output, session) {
 
-  # The browser can report a zero width for an instant at startup (before the
-  # layout settles), which crashes the graphics device. Fall back to a sane
-  # default until a real measurement arrives.
-  safe_width &lt;- function(id, default = 750) {
-    function() {
-      w &lt;- session$clientData[[paste0("output_", id, "_width")]]
-      if (is.null(w) || !is.finite(w) || w &lt; 50) default else w
-    }
-  }
-
+  # State: wins count for every simulated portfolio (an integer per
+  # simulation), plus the WIN/LOSS outcomes of the most recent portfolio
+  # (so we can draw the tile strip). Totals are re-derived as 3*wins - N
+  # and the proportion profitable as wins / N.
   values &lt;- reactiveValues(
-    mean_history   = numeric(0),   # one sample mean per sample taken
-    current_sample = numeric(0)    # the n values of the most recent sample
+    history = integer(0),          # number of profitable investments per sim
+    current_outcomes = numeric(0)  # the N payoffs of the current portfolio
   )
 
-  n_size &lt;- reactive(as.integer(input$n))
-
-  # The interval is x-bar +/- 2 SE using the KNOWN population sd, so the margin
-  # is the same for every sample: a sample captures mu exactly when its mean
-  # lands within one margin of it. That makes coverage a function of the stored
-  # means alone -- no need to track hits as they happen.
-  ci_margin &lt;- reactive(2 * POP_SD / sqrt(n_size()))
-
-  # Keep the slider and the typed sample size in sync: typing a value (rounded
-  # to an integer and clamped to 1-100 for safety) moves the slider, and moving
-  # the slider fills the numeric box. Updates with no change don't re-fire, so
-  # this can't loop.
-  observeEvent(input$n_typed, {
-    v &lt;- input$n_typed
-    if (length(v) != 1L || !is.finite(v)) return()
-    v &lt;- max(1, min(100, round(v)))
-    updateNumericInput(session, "n_typed", value = v)
-    updateSliderInput(session, "n", value = v)
-  })
-  observeEvent(input$n, {
-    updateNumericInput(session, "n_typed", value = input$n)
-  })
-
+  # Changing N invalidates the accumulated distribution
   reset_history &lt;- function() {
-    values$mean_history   &lt;- numeric(0)
-    values$current_sample &lt;- numeric(0)
+    values$history &lt;- integer(0)
+    values$current_outcomes &lt;- numeric(0)
   }
-
-  # Changing n invalidates the accumulated distribution
-  observeEvent(input$n, reset_history(), ignoreInit = TRUE)
+  observeEvent(input$n_proj, reset_history(), ignoreInit = TRUE)
   observeEvent(input$clear, reset_history())
 
-  # Take 1 sample: append its mean and keep the sample for the middle panel
-  observeEvent(input$take_one, {
-    s &lt;- sample(pop, n_size(), replace = TRUE)
-    values$current_sample &lt;- s
-    values$mean_history &lt;- c(values$mean_history, mean(s))
+  # Draw one portfolio: N independent coin flips between +$2M and -$1M
+  simulate_portfolio &lt;- function() {
+    sample(c(WIN, LOSS), size = input$n_proj, replace = TRUE)
+  }
+
+  # Simulate 1 portfolio: record its win count, show its outcomes
+  observeEvent(input$sim_one, {
+    outcomes &lt;- simulate_portfolio()
+    values$current_outcomes &lt;- outcomes
+    values$history &lt;- c(values$history, sum(outcomes == WIN))
   })
 
-  # Take many samples: fast path for the bulk (means only), plus one full draw
-  # so the current-sample panel has something to show.
-  observeEvent(input$take_many, {
-    n &lt;- n_size()
+  # Simulate many portfolios: record k win counts, display the last one.
+  # Fast path: the bulk of the win counts come straight from rbinom(); only
+  # the final portfolio is drawn in full so the tile panel can show it.
+  observeEvent(input$sim_many, {
     k &lt;- input$k
     if (length(k) != 1L || !is.finite(k)) {
-      showNotification("Enter a number of samples from 1 to 10,000.", type = "warning")
+      showNotification("Enter a number of portfolios from 1 to 10,000.", type = "warning")
       return()
     }
-    k &lt;- max(1, min(10000, round(k)))
+    k &lt;- max(1, min(round(k), 10000))
     updateNumericInput(session, "k", value = k)
+    N &lt;- input$n_proj
+
     if (k &gt; 1) {
-      bulk &lt;- colMeans(matrix(sample(pop, n * (k - 1), replace = TRUE), nrow = n))
-      values$mean_history &lt;- c(values$mean_history, bulk)
+      values$history &lt;- c(values$history, rbinom(k - 1, N, 0.5))
     }
-    s &lt;- sample(pop, n, replace = TRUE)
-    values$current_sample &lt;- s
-    values$mean_history &lt;- c(values$mean_history, mean(s))
+    outcomes &lt;- simulate_portfolio()
+    values$current_outcomes &lt;- outcomes
+    values$history &lt;- c(values$history, sum(outcomes == WIN))
   })
 
-  # Top panel: the population
-  output$pop_plot &lt;- renderPlot(width = safe_width("pop_plot"), {
-    par(mar = c(4.2, 4.2, 0.5, 0.5))
-    hist(pop, breaks = seq(POP_XLIM[1], POP_XLIM[2], length.out = 61),
-         col = bar_color, border = "white", main = "", freq = TRUE,
-         xlim = POP_XLIM, xlab = "Return on equity (ROE, %)", ylab = "Count",
-         axes = FALSE)
-    pct_axis(); axis(2)
-    abline(v = POP_MEAN, col = mean_color, lwd = 2.5)
-    stats_box(c(
-      sprintf("Population size (N) = %s", format(M_POP, big.mark = ",")),
-      sprintf("Population mean (mu) = %.1f%%", POP_MEAN),
-      sprintf("Population SD (sigma) = %.1f percentage points", POP_SD)
-    ))
+  # Smallest number of profitable investments that yields an overall profit
+  output$required_wins &lt;- renderUI({
+    req &lt;- floor(input$n_proj / 3) + 1
+    div(
+      style = "font-size: 0.85em; color: #555; margin-bottom: 12px;",
+      sprintf("Profit requires at least %d profitable %s.",
+              req, if (req == 1) "project" else "projects")
+    )
   })
 
-  # Middle panel: the current sample, on the same x-limits as the population
-  output$sample_plot &lt;- renderPlot(width = safe_width("sample_plot"), {
-    if (length(values$current_sample) == 0) {
-      par(mar = c(0.5, 0.5, 0.5, 0.5))
-      plot.new()
-      text(0.5, 0.5, "Take a sample to see it here", col = "grey50", cex = 1.3)
-      return(invisible())
-    }
-
-    s &lt;- values$current_sample
-    xbar &lt;- mean(s)
-
-    par(mar = c(4.2, 4.2, 0.5, 0.5))
-    hist(s, breaks = seq(5 * floor(POP_XLIM[1] / 5),
-                         5 * ceiling(POP_XLIM[2] / 5), by = 5),
-         col = bar_color, border = "white", main = "", freq = TRUE,
-         xlim = POP_XLIM, xlab = "Return on equity (ROE, %)", ylab = "Count",
-         axes = FALSE)
-    pct_axis(); axis(2)
-    rug(s, col = bar_color)
-    abline(v = xbar, col = mark_color, lwd = 2.5)
-    stats_box(c(
-      sprintf("Sample size (n) = %d", length(s)),
-      sprintf("Sample mean (x-bar) = %.1f%%", xbar),
-      sprintf("Sample SD (s) = %s",
-              if (length(s) &gt;= 2) sprintf("%.1f percentage points", sd(s)) else "-")
-    ))
-  })
-
-  # Bottom panel: sampling distribution of the sample mean, on the density
-  # scale so the normal overlay needs no rescaling.
-  output$dist_plot &lt;- renderPlot(width = safe_width("dist_plot", 950), {
-    if (length(values$mean_history) == 0) {
-      par(mar = c(0.5, 0.5, 0.5, 0.5))
-      plot.new()
-      text(0.5, 0.5, "Take samples to build up the sampling distribution",
-           col = "grey50", cex = 1.3)
-      return(invisible())
-    }
-
-    n &lt;- n_size()
-    se &lt;- POP_SD / sqrt(n)
-    m &lt;- values$mean_history
-    bw &lt;- input$bw_means
-
-    # Bins aligned so that POP_MEAN falls on a bin boundary
-    lo &lt;- POP_MEAN - bw * ceiling((POP_MEAN - min(m)) / bw + 1)
-    hi &lt;- POP_MEAN + bw * ceiling((max(m) - POP_MEAN) / bw + 1)
-    h &lt;- hist(m, breaks = seq(lo, hi, by = bw), plot = FALSE)
-
-    y_hi &lt;- max(c(h$density,
-                  if (input$show_normal) dnorm(POP_MEAN, POP_MEAN, se))) * 1.12
-
-    par(mar = c(4.2, 4.2, 0.5, 0.5))
-    plot(h, freq = FALSE, col = bar_color, border = "white", main = "",
-         xlim = POP_XLIM, ylim = c(0, y_hi),
-         xlab = "Sample mean ROE (%)", ylab = "Density", axes = FALSE)
-    pct_axis(); axis(2)
-    abline(v = POP_MEAN, col = mean_color, lty = 2, lwd = 2)
-
-    if (input$show_normal) {
-      xs &lt;- seq(POP_XLIM[1], POP_XLIM[2], length.out = 400)
-      lines(xs, dnorm(xs, POP_MEAN, se), col = normal_color, lwd = 2.5)
-    }
-
-    # X on the axis marking the current sample's mean, with its interval when
-    # requested. Green when the interval covers mu, red when it misses.
-    if (length(values$current_sample) &gt; 0) {
-      xbar &lt;- mean(values$current_sample)
-      x_color &lt;- if (input$show_ci) {
-        if (abs(xbar - POP_MEAN) &lt;= ci_margin()) hit_color else miss_color
-      } else {
-        mark_color
-      }
-
-      if (input$show_ci) {
-        lo_ci &lt;- xbar - ci_margin()
-        hi_ci &lt;- xbar + ci_margin()
-        cap &lt;- 0.02 * y_hi
-        segments(lo_ci, 0, hi_ci, 0, col = x_color, lwd = 4, xpd = NA)
-        segments(c(lo_ci, hi_ci), -cap, c(lo_ci, hi_ci), cap,
-                 col = x_color, lwd = 3, xpd = NA)
-      }
-
-      points(xbar, 0, pch = 4, cex = 1.6, lwd = 3, col = x_color, xpd = NA)
-    }
-  })
-
-  output$n_samples &lt;- renderText({
-    total &lt;- length(values$mean_history)
-    if (total &gt; 0 &amp;&amp; input$show_ci) {
-      coverage &lt;- mean(abs(values$mean_history - POP_MEAN) &lt;= ci_margin())
-      sprintf("Samples taken: %d   |   CI coverage: %.1f%%", total, 100 * coverage)
+  # Header for the bottom card, depends on the view
+  output$dist_title &lt;- renderText({
+    if (isTRUE(input$show_prop)) {
+      "Distribution of the proportion of profitable projects"
     } else {
-      paste("Samples taken:", total)
+      "Distribution of total payoffs"
     }
+  })
+
+  # One-line summary of the current portfolio
+  output$portfolio_summary &lt;- renderText({
+    if (length(values$current_outcomes) == 0) return("")
+    N &lt;- length(values$current_outcomes)
+    wins &lt;- sum(values$current_outcomes == WIN)
+    total &lt;- SPACING * wins - N
+    sprintf("Profitable projects: %d of %d (%.1f%%)  |  Total payoff: %s$%dM",
+            wins, N, 100 * wins / N, if (total &lt; 0) "-" else "", abs(total))
+  })
+
+  # Top card: strip of the N investments in the current portfolio,
+  # wrapping at TILES_PER_ROW per row
+  output$portfolio_plot &lt;- renderPlot({
+
+    if (length(values$current_outcomes) == 0) {
+      # Placeholder before the first simulation
+      return(
+        ggplot() +
+          theme_void() +
+          annotate("text", x = 0.5, y = 0.5,
+                   label = "Click 'Simulate 1 portfolio' to begin",
+                   size = 5, color = "gray60")
+      )
+    }
+
+    outcomes &lt;- values$current_outcomes
+    idx &lt;- seq_along(outcomes)
+    x &lt;- (idx - 1) %% TILES_PER_ROW + 1
+    y &lt;- -((idx - 1) %/% TILES_PER_ROW) * 1.7
+
+    tiles &lt;- data.frame(
+      x = x,
+      y = y,
+      idx = idx,
+      label = ifelse(outcomes == WIN, "+$2M", "-$1M"),
+      fill = ifelse(outcomes == WIN, win_color, loss_color)
+    )
+
+    ggplot(tiles) +
+      # Investment number above each tile
+      geom_text(aes(x = x, y = y + 0.62, label = idx),
+                size = 3.6, color = "gray30") +
+      # One colored tile per investment, labeled with its payoff
+      geom_tile(aes(x = x, y = y, fill = fill),
+                width = 0.92, height = 0.85) +
+      geom_text(aes(x = x, y = y, label = label),
+                color = "white", size = 4.2, fontface = "bold") +
+      scale_fill_identity() +
+      coord_cartesian(xlim = c(0.4, TILES_PER_ROW + 0.6),
+                      ylim = c(min(y) - 0.7, 0.95), expand = FALSE) +
+      theme_void()
+  })
+
+  # Bottom card: bar plot of the accumulated distribution
+  output$dist_plot &lt;- renderPlot({
+
+    N &lt;- input$n_proj
+
+    if (length(values$history) == 0) {
+      return(
+        ggplot() +
+          theme_void() +
+          annotate("text", x = 0.5, y = 0.5,
+                   label = "Simulate a portfolio to see the distribution",
+                   size = 5, color = "gray60")
+      )
+    }
+
+    n_sims &lt;- length(values$history)
+    wins &lt;- 0:N
+    counts &lt;- tabulate(values$history + 1, nbins = N + 1)
+    prop &lt;- counts / n_sims
+
+    # A losing portfolio has total 3*wins - N &lt; 0 (a total of exactly 0 is
+    # not a loss). Equivalent to wins &lt; N/3.
+    is_loss &lt;- (SPACING * wins - N) &lt; 0
+
+    prop_mode &lt;- isTRUE(input$show_prop)
+    as_pct &lt;- isTRUE(input$as_percent)
+    show_loss &lt;- isTRUE(input$show_loss)
+
+    has_current &lt;- length(values$current_outcomes) &gt; 0
+    current_wins &lt;- if (has_current) sum(values$current_outcomes == WIN) else NA
+
+    if (prop_mode) {
+      # Proportion of investments profitable: support at wins/N, spacing 1/N.
+      xvals &lt;- wins / N
+      barwidth &lt;- 0.6 / N
+      mu &lt;- 0.5
+      sd_x &lt;- sqrt(0.25 / N)
+      overlay_scale &lt;- 1 / N
+      current_x &lt;- if (has_current) current_wins / N else NA
+      x_label &lt;- if (as_pct) "Percent of profitable projects"
+                 else "Proportion of profitable projects"
+    } else {
+      # Total payoff: support at 3*wins - N, spacing SPACING ($3M).
+      xvals &lt;- SPACING * wins - N
+      barwidth &lt;- 0.6 * SPACING
+      # Total = 3*wins - N; mean wins is 0.5N, so mean total = 0.5N and
+      # var total = 9 * var(wins) = 9 * 0.25 * N = 2.25N.
+      mu &lt;- 0.5 * N
+      sd_x &lt;- sqrt(2.25 * N)
+      overlay_scale &lt;- SPACING
+      current_x &lt;- if (has_current) SPACING * current_wins - N else NA
+      x_label &lt;- "Total payoff ($M)"
+    }
+
+    bars &lt;- data.frame(
+      x = xvals,
+      prop = prop,
+      fill = ifelse(show_loss &amp; is_loss, loss_color, bar_color)
+    )
+
+    y_expand &lt;- expansion(mult = c(0.02, if (show_loss) 0.14 else 0.1))
+
+    p &lt;- ggplot(bars, aes(x = x, y = prop)) +
+      geom_col(aes(fill = fill), width = barwidth, alpha = 0.85) +
+      scale_fill_identity() +
+      scale_y_continuous(expand = y_expand) +
+      labs(x = x_label, y = "Proportion of simulations") +
+      theme_minimal() +
+      theme(
+        panel.grid.minor = element_blank(),
+        axis.title = element_text(size = 13),
+        axis.text = element_text(size = 10)
+      )
+
+    if (prop_mode) {
+      if (as_pct) {
+        p &lt;- p + scale_x_continuous(
+          labels = function(x) paste0(round(100 * x), "%")
+        )
+      }
+    } else {
+      p &lt;- p + scale_x_continuous(breaks = scales::breaks_pretty())
+    }
+
+    # Normal approximation, scaled by the support spacing so density matches
+    # the proportion heights.
+    if (isTRUE(input$show_normal)) {
+      p &lt;- p + stat_function(
+        fun = function(x) dnorm(x, mean = mu, sd = sd_x) * overlay_scale,
+        color = normal_color, linewidth = 1.2, alpha = 0.9
+      )
+    }
+
+    # Annotation summarizing how often money was lost
+    if (show_loss) {
+      n_loss &lt;- sum(values$history &lt; N / 3)
+      prop_loss &lt;- n_loss / n_sims
+      p &lt;- p + annotate(
+        "text", x = -Inf, y = Inf, hjust = -0.05, vjust = 1.5,
+        label = sprintf("Lost money in %.1f%% of simulations (%d of %d)",
+                        100 * prop_loss, n_loss, n_sims),
+        color = loss_color, size = 4.8
+      )
+    }
+
+    # Red X marking the current portfolio's value
+    if (has_current) {
+      p &lt;- p + geom_point(
+        data = data.frame(x = current_x, y = 0),
+        aes(x = x, y = y),
+        shape = 4, size = 4, color = "red", stroke = 2,
+        inherit.aes = FALSE
+      )
+    }
+
+    p
+  })
+
+  # Footer: running count of simulated portfolios
+  output$n_simulated &lt;- renderText({
+    paste("Portfolios simulated:", length(values$history))
   })
 }
 
