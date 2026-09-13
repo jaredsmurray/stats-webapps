@@ -12,16 +12,17 @@ apps/                 # source Shiny apps (app.R, plus shinylive ports)
   sap_sampling/       # sampling distribution of the mean, SAP customer ROE
   sap_bootstrap/      # bootstrap resampling of the Nucleus sample
   bagging/            # averaging regression trees over bootstrap resamples
-  thaler/             # see "thaler" below
+  thaler/             # independent projects and total portfolio payoffs
 index.qmd             # site index
 sap_sampling.qmd      # site page embedding the sampling app
 sap_bootstrap.qmd     # site page embedding the bootstrap app
 bagging.qmd           # site page embedding the bagging app
+thaler.qmd            # site page embedding the Thaler app
 _extensions/quarto-ext/shinylive
 ```
 
-Page URLs are `<site root>/sap_sampling.html`, `/sap_bootstrap.html`, and
-`/bagging.html`. The book links these pages mid-prose, so the stems are stable —
+Page URLs are `<site root>/sap_sampling.html`, `/sap_bootstrap.html`,
+`/bagging.html`, and `/thaler.html`. The book links these pages mid-prose, so the stems are stable —
 do not rename them.
 
 ## Publishing
@@ -34,26 +35,36 @@ Each app page declares `engine: knitr` in its front matter. Without it Quarto
 sees only a `shinylive-r` cell, reaches for the Jupyter engine, and fails before
 the shinylive filter ever runs.
 
-## Deferred cleanup: duplicated app code
+## Editing and testing
 
-Each site page carries the app's code inline in a `shinylive-r` chunk, and
-`apps/<name>/` carries the same code as a runnable Shiny app. The two copies are
-kept in sync **by hand**. Generating the wrapper chunk from `app.R` at render
-time is the intended fix and is deferred; until then, any change to an app has to
-be made in both places.
+The sampling and Thaler pages read their app scripts during rendering. Edit
+`apps/sap_sampling/app_shinylive.R` and `apps/thaler/app.R`; their QMD wrappers
+contain no separate copy of the app code. The sampling app also has a local
+ggplot variant in `apps/sap_sampling/app.R`. Keep its behavior and labels aligned
+with the browser version.
 
-Two related wrinkles that come with the duplication:
+Bootstrap and bagging still carry inline app code in their pages. Changes to
+those apps must also update their corresponding page chunks.
 
-- The `sap_sampling` and `bagging` apps have base-graphics ports
-  (`app_shinylive.R`) because the shinylive bundle can only include CRAN
-  packages and this project's ggplot2 is a GitHub install. The ports stay as-is.
-- Header comments inside the app files and chunks still cite the old monorepo
-  paths (`webapps/bagging_app`, `bagging_app.qmd`, and so on). They were left
-  byte-identical during the split; refresh them along with the dedup work.
+Run the app regression checks from the repository root:
 
-## thaler
+```bash
+Rscript tests/app-regression.R
+```
 
-`apps/thaler/` is orphaned: no site page links to it and no chapter or deck
-references it. It was carried over so nothing is lost, but it is **not** part of
-the website and is not listed on the index. Keep-or-drop is still an open
-decision; drop the directory if it turns out nothing needs it.
+## Browser build dependencies
+
+Render Thaler using a CRAN build library containing ggplot2 3.5.2 and scales
+1.3.0, matching the versions available in the current WebAssembly repository.
+Newer desktop versions can omit dependencies required by these browser versions.
+A GitHub development installation of ggplot2 cannot supply this browser bundle.
+Use a separate library to preserve the desktop environment:
+
+```bash
+R_LIBS=/path/to/browser-library quarto render thaler.qmd
+R_LIBS=/path/to/browser-library quarto render sap_sampling.qmd
+```
+
+The app pages keep the experiment assumptions and controls concise; the notes
+provide the walkthroughs. Browser testing must cover startup, plots, bulk
+simulation, invalid batch counts, display toggles, and history resets.

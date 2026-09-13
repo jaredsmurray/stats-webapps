@@ -6,9 +6,8 @@ Interactive apps for *Introduction to Statistics and Data Science*. Each one run
 entirely in your browser, so nothing needs to be installed and the first load
 takes a few moments.
 
-- [Sampling Distribution Explorer](sap_sampling.qmd) --- draw samples from a
-  simulated population of customer ROE values and watch the sampling
-  distribution of the sample mean build up.
+- [Sampling distributions: SAP customer ROE](sap_sampling.qmd)
+- [Thaler's investment example](thaler.qmd)
 - [Bootstrap Explorer](sap_bootstrap.qmd) --- resample one real sample of 81
   firms with replacement and see the bootstrap approximation to that same
   sampling distribution.

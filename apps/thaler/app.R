@@ -14,7 +14,7 @@ LOSS <- -1              # payoff of an unprofitable investment, in $M
 SPACING <- 3            # gap between adjacent possible totals ($M): WIN - LOSS
 
 # How many tiles to show per row in the current-portfolio strip
-TILES_PER_ROW <- 25
+TILES_PER_ROW <- 12
 
 # Colorblind-safe colors
 win_color  <- "#009E73"   # green for +$2M
@@ -23,7 +23,7 @@ bar_color  <- "#0173B2"   # blue for the distribution bars
 normal_color <- "#9370DB" # purple for the normal curve
 
 ui <- page_sidebar(
-  title = "Thaler Example: Simulating N Independent Investments",
+  title = "Thaler's investment example",
 
   # Consistent font across the app and its plots
   tags$head(
@@ -40,8 +40,10 @@ ui <- page_sidebar(
   sidebar = sidebar(
     width = 300,
 
+    p("Each project independently earns $2 million or loses $1 million, each with probability 0.5."),
+
     # Number of independent investments
-    sliderInput("n_proj", "Number of investments (N):",
+    sliderInput("n_proj", "Number of projects (N):",
                 min = 1, max = 50, value = 23, step = 1, ticks = FALSE),
 
     # Required wins for an overall profit
@@ -54,11 +56,11 @@ ui <- page_sidebar(
 
     # Simulate many portfolios at once
     div(
-      style = "display: flex; gap: 5px; margin-bottom: 5px;",
-      numericInput("k", label = NULL, value = 50, min = 1, max = 10000,
-                   width = "80px"),
+      style = "margin-bottom: 10px;",
+      numericInput("k", label = "Number of portfolios", value = 50, min = 1, max = 10000,
+                   width = "100%"),
       actionButton("sim_many", "Simulate many",
-                   style = "flex: 1;")
+                   style = "width: 100%;")
     ),
 
     # Clear everything and start over
@@ -70,7 +72,7 @@ ui <- page_sidebar(
     checkboxInput("show_normal", "Show normal approximation", value = FALSE),
 
     # Switch the bottom panel to the proportion of profitable investments
-    checkboxInput("show_prop", "Show proportion profitable", value = FALSE),
+    checkboxInput("show_prop", "Show proportion of profitable projects", value = FALSE),
     conditionalPanel(
       condition = "input.show_prop == true",
       div(
@@ -86,7 +88,7 @@ ui <- page_sidebar(
   # Main area: current portfolio on top, distribution below
   layout_columns(
     col_widths = c(12),
-    row_heights = c("32%", "68%"),
+    row_heights = c("40%", "60%"),
 
     card(
       card_header("This portfolio"),
@@ -144,8 +146,12 @@ server <- function(input, output, session) {
   # the final portfolio is drawn in full so the tile panel can show it.
   observeEvent(input$sim_many, {
     k <- input$k
-    if (is.na(k) || k < 1) return()
-    k <- min(round(k), 10000)
+    if (length(k) != 1L || !is.finite(k)) {
+      showNotification("Enter a number of portfolios from 1 to 10,000.", type = "warning")
+      return()
+    }
+    k <- max(1, min(round(k), 10000))
+    updateNumericInput(session, "k", value = k)
     N <- input$n_proj
 
     if (k > 1) {
@@ -161,7 +167,7 @@ server <- function(input, output, session) {
     req <- floor(input$n_proj / 3) + 1
     div(
       style = "font-size: 0.85em; color: #555; margin-bottom: 12px;",
-      sprintf("%d profitable %s required for overall profit",
+      sprintf("Profit requires at least %d profitable %s.",
               req, if (req == 1) "project" else "projects")
     )
   })
@@ -169,7 +175,7 @@ server <- function(input, output, session) {
   # Header for the bottom card, depends on the view
   output$dist_title <- renderText({
     if (isTRUE(input$show_prop)) {
-      "Distribution of the proportion profitable"
+      "Distribution of the proportion of profitable projects"
     } else {
       "Distribution of total payoffs"
     }
@@ -181,8 +187,8 @@ server <- function(input, output, session) {
     N <- length(values$current_outcomes)
     wins <- sum(values$current_outcomes == WIN)
     total <- SPACING * wins - N
-    sprintf("Profitable: %d of %d (%.1f%%)  |  Total profit: $%dM",
-            wins, N, 100 * wins / N, total)
+    sprintf("Profitable projects: %d of %d (%.1f%%)  |  Total payoff: %s$%dM",
+            wins, N, 100 * wins / N, if (total < 0) "-" else "", abs(total))
   })
 
   # Top card: strip of the N investments in the current portfolio,
@@ -216,12 +222,12 @@ server <- function(input, output, session) {
     ggplot(tiles) +
       # Investment number above each tile
       geom_text(aes(x = x, y = y + 0.62, label = idx),
-                size = 3, color = "gray30") +
+                size = 3.6, color = "gray30") +
       # One colored tile per investment, labeled with its payoff
       geom_tile(aes(x = x, y = y, fill = fill),
                 width = 0.92, height = 0.85) +
       geom_text(aes(x = x, y = y, label = label),
-                color = "white", size = 3.0, fontface = "bold") +
+                color = "white", size = 4.2, fontface = "bold") +
       scale_fill_identity() +
       coord_cartesian(xlim = c(0.4, TILES_PER_ROW + 0.6),
                       ylim = c(min(y) - 0.7, 0.95), expand = FALSE) +
@@ -267,8 +273,8 @@ server <- function(input, output, session) {
       sd_x <- sqrt(0.25 / N)
       overlay_scale <- 1 / N
       current_x <- if (has_current) current_wins / N else NA
-      x_label <- if (as_pct) "Percent of investments profitable"
-                 else "Proportion of investments profitable"
+      x_label <- if (as_pct) "Percent of profitable projects"
+                 else "Proportion of profitable projects"
     } else {
       # Total payoff: support at 3*wins - N, spacing SPACING ($3M).
       xvals <- SPACING * wins - N
@@ -329,7 +335,7 @@ server <- function(input, output, session) {
         "text", x = -Inf, y = Inf, hjust = -0.05, vjust = 1.5,
         label = sprintf("Lost money in %.1f%% of simulations (%d of %d)",
                         100 * prop_loss, n_loss, n_sims),
-        color = loss_color, size = 4
+        color = loss_color, size = 4.8
       )
     }
 

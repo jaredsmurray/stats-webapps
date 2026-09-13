@@ -1,7 +1,7 @@
 ---
 engine: knitr
-title: "Sampling distributions: SAP customer ROE"
-description: "Sampling from a simulated population of 30,000 companies."
+title: "Thaler's investment example"
+description: "Independent projects that earn $2 million or lose $1 million, each with probability 0.5."
 search: false
 execute:
   echo: false
@@ -17,7 +17,7 @@ format:
 
 ```{r}
 #| results: asis
-cat("```{shinylive-r}\n#| viewerHeight: 1120\n#| standalone: true\n",
-    paste(readLines("apps/sap_sampling/app_shinylive.R"), collapse = "\n"),
+cat("```{shinylive-r}\n#| viewerHeight: 850\n#| standalone: true\n",
+    paste(readLines("apps/thaler/app.R"), collapse = "\n"),
     "\n```\n", sep = "")
 ```

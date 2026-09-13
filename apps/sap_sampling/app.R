@@ -6,7 +6,7 @@
 # ROE; the app accumulates the sampling distribution of the sample mean across
 # samples, with an optional normal overlay N(mu, sigma / sqrt(n)).
 #
-# Run locally with shiny::runApp("webapps/sap_sampling_app").
+# Run from the webapps project with shiny::runApp("apps/sap_sampling").
 
 library(shiny)
 library(bslib)
@@ -75,7 +75,7 @@ pop_plot <- ggplot(pop_df, aes(x = roe)) +
   geom_vline(xintercept = POP_MEAN, color = mean_color, linewidth = 1.1) +
   geom_label(
     data = data.frame(x = Inf, y = Inf, lab = sprintf(
-      "Population size (N) = %s\nPopulation mean (mu) = %.1f%%\nPopulation SD (sigma) = %.1f%%",
+      "Population size (N) = %s\nPopulation mean (mu) = %.1f%%\nPopulation SD (sigma) = %.1f percentage points",
       format(M_POP, big.mark = ","), POP_MEAN, POP_SD)),
     aes(x = x, y = y, label = lab), inherit.aes = FALSE,
     hjust = 1.02, vjust = 1.1, size = 4.5, color = "gray20",
@@ -92,7 +92,7 @@ pop_plot <- ggplot(pop_df, aes(x = roe)) +
   )
 
 ui <- page_sidebar(
-  title = "Sampling Distribution of the Sample Mean — SAP Customer ROE",
+  title = "Sampling distributions: SAP customer ROE",
 
   # Consistent font across the app and its plots
   tags$head(
@@ -107,7 +107,7 @@ ui <- page_sidebar(
 
     sliderInput("n", "Sample size (n):",
                 min = 1, max = 100, value = 25, step = 1, ticks = FALSE),
-    numericInput("n_typed", "...or type a sample size:",
+    numericInput("n_typed", "Sample size (typed):",
                  value = 25, min = 1, max = 100, step = 1),
 
     div(
@@ -116,11 +116,11 @@ ui <- page_sidebar(
                    class = "btn-primary",
                    style = "margin-bottom: 5px; width: 100%;"),
       div(
-        style = "display: flex; gap: 5px; margin-bottom: 5px;",
-        numericInput("k", label = NULL, value = 50, min = 1, max = 10000,
-                     width = "80px"),
+        style = "margin-bottom: 10px;",
+        numericInput("k", label = "Number of samples", value = 50, min = 1, max = 10000,
+                     width = "100%"),
         actionButton("take_many", "Take many samples",
-                     style = "flex: 1;")
+                     style = "width: 100%;")
       ),
       actionButton("clear", "Clear history",
                    class = "btn-outline-secondary",
@@ -128,9 +128,9 @@ ui <- page_sidebar(
     ),
 
     checkboxInput("show_normal", "Show normal approximation", value = FALSE),
-    checkboxInput("show_ci", "Show 95% confidence interval", value = FALSE),
+    checkboxInput("show_ci", "Show approximate 95% confidence interval", value = FALSE),
 
-    sliderInput("bw_means", "Bin width (sample means, % points):",
+    sliderInput("bw_means", "Bin width (percentage points):",
                 min = 0.1, max = 5, value = 0.5, step = 0.1,
                 ticks = FALSE)
   ),
@@ -158,7 +158,7 @@ ui <- page_sidebar(
         conditionalPanel(
           condition = "input.show_ci",
           style = "font-size: 0.85em; margin-top: 4px;",
-          HTML("<span style='color: #2E8B57;'>Green</span>: this sample's 95% CI
+          HTML("<span style='color: #2E8B57;'>Green</span>: this sample's interval
                 captures &mu;; <span style='color: #CC0000;'>red</span>: it misses")
         )
       )
@@ -197,7 +197,7 @@ server <- function(input, output, session) {
   # this can't loop.
   observeEvent(input$n_typed, {
     v <- input$n_typed
-    if (is.null(v) || is.na(v)) return()
+    if (length(v) != 1L || !is.finite(v)) return()
     v <- max(1, min(100, round(v)))
     updateNumericInput(session, "n_typed", value = v)
     updateSliderInput(session, "n", value = v)
@@ -226,7 +226,13 @@ server <- function(input, output, session) {
   # so the current-sample panel has something to show.
   observeEvent(input$take_many, {
     n <- n_size()
-    k <- max(1, min(10000, round(input$k)))
+    k <- input$k
+    if (length(k) != 1L || !is.finite(k)) {
+      showNotification("Enter a number of samples from 1 to 10,000.", type = "warning")
+      return()
+    }
+    k <- max(1, min(10000, round(k)))
+    updateNumericInput(session, "k", value = k)
     if (k > 1) {
       bulk <- colMeans(matrix(sample(pop, n * (k - 1), replace = TRUE), nrow = n))
       values$mean_history <- c(values$mean_history, bulk)
@@ -266,7 +272,7 @@ server <- function(input, output, session) {
         data = data.frame(x = Inf, y = Inf, lab = sprintf(
           "Sample size (n) = %d\nSample mean (x-bar) = %.1f%%\nSample SD (s) = %s",
           length(s), xbar,
-          if (length(s) >= 2) sprintf("%.1f%%", sd(s)) else "-")),
+          if (length(s) >= 2) sprintf("%.1f percentage points", sd(s)) else "-")),
         aes(x = x, y = y, label = lab), inherit.aes = FALSE,
         hjust = 1.02, vjust = 1.1, size = 4.5, color = "gray20",
         lineheight = 1.1, fontface = "bold",
