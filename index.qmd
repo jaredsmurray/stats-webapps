@@ -8,8 +8,3 @@ takes a few moments.
 
 - [Sampling distributions: SAP customer ROE](sap_sampling.qmd)
 - [Thaler's investment example](thaler.qmd)
-- [Bootstrap Explorer](sap_bootstrap.qmd) --- resample one real sample of 81
-  firms with replacement and see the bootstrap approximation to that same
-  sampling distribution.
-- [Bagging Explorer](bagging.qmd) --- fit a regression tree to each of many
-  resamples and watch the average of the trees settle into a stable curve.

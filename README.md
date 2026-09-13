@@ -27,6 +27,11 @@ do not rename them.
 
 ## Publishing
 
+Only sampling and Thaler are currently approved for the website. Bootstrap and
+bagging are held for functionality and copy review. The render list in
+`_quarto.yml` contains only the approved pages. Preview held apps outside
+`_site/` so a subsequent publication cannot include those previews.
+
 ```
 quarto publish gh-pages
 ```

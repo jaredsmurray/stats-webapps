@@ -1,6 +1,10 @@
 project:
   type: website
   output-dir: _site
+  render:
+    - index.qmd
+    - sap_sampling.qmd
+    - thaler.qmd
 
 website:
   title: "Statistics Web Apps"
