@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paths to a Payoff</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#f7f8fa; --ink:#1c2330; --muted:#5d6878; --rule:#d5dae2; --panel:#ffffff;
+  --bar:#4682b4; --hi:#1c2330; --fail:#b5533c; --succ:#3d8b5f; --normal:#e07b00; --grid:#e6e9ee;
+  --ctrl:#eef1f5; --ctrl-ink:#1c2330; --focus:#4682b4;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151a22; --ink:#e6eaf0; --muted:#9aa5b5; --rule:#2c3543; --panel:#1c232e;
+    --bar:#6aa3d1; --hi:#ffffff; --fail:#d9705a; --succ:#5cb27f; --normal:#f0963a; --grid:#273040;
+    --ctrl:#26303d; --ctrl-ink:#e6eaf0;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151a22; --ink:#e6eaf0; --muted:#9aa5b5; --rule:#2c3543; --panel:#1c232e;
+  --bar:#6aa3d1; --hi:#ffffff; --fail:#d9705a; --succ:#5cb27f; --normal:#f0963a; --grid:#273040;
+  --ctrl:#26303d; --ctrl-ink:#e6eaf0;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15px;line-height:1.4;padding:20px 16px 32px}
+.wrap{max-width:1000px;margin:0 auto;display:grid;gap:14px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px;margin-bottom:-6px}
+h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-.01em}
+header p{margin:0;color:var(--muted);font-size:14px}
+.setup{margin:0;max-width:68ch;font-size:15px}
+.setup .succ{color:var(--succ);font-weight:500}
+.setup .fail{color:var(--fail);font-weight:500}
+.controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.controls label{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
+select,button{font:inherit;font-size:14px;color:var(--ctrl-ink);background:var(--ctrl);border:1px solid var(--rule);border-radius:4px;padding:5px 10px;cursor:pointer}
+button.primary{background:var(--bar);color:#fff;border-color:transparent;font-weight:500}
+button:disabled{opacity:.45;cursor:default}
+select:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.stage{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:8px 8px 4px}
+svg{width:100%;height:auto;display:block}
+.axis text{font-family:"IBM Plex Mono",monospace;font-size:11px;fill:var(--muted)}
+.axis line,.axis path{stroke:var(--rule)}
+.gridline{stroke:var(--grid)}
+.axlabel,.paneltitle{font-size:12px;fill:var(--muted)}
+.tri text{font-family:"IBM Plex Mono",monospace;font-size:9.5px;fill:var(--ink)}
+.tri .rowlab{fill:var(--muted)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;color:var(--muted);align-items:center}
+.sw{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-1px;margin-right:6px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;font-variant-numeric:tabular-nums}
+.stat{border-top:2px solid var(--rule);padding-top:6px}
+.stat .k{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.stat .v{font-family:"IBM Plex Mono",monospace;font-size:20px;margin-top:2px}
+.phase{font-size:13px;color:var(--muted);min-height:1.4em}
+h2{font-size:16px;font-weight:600;margin:12px 0 0}
+.lat text{font-family:"IBM Plex Mono",monospace;font-size:10.5px;fill:var(--ink)}
+.lat .nodecount{font-weight:500}
+.lat .rowlab,.lat .axlab{fill:var(--muted);font-size:10px}
+.lat .base{stroke:var(--rule);stroke-width:1}
+.chipcap{font-family:"IBM Plex Mono",monospace;font-size:13px}
+.chip{display:inline-block;width:14px;height:14px;border-radius:3px;margin-right:2px;vertical-align:-2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Paths to a Payoff</h1>
+  </header>
+  <p class="setup">A company takes on <em>n</em> projects. Each one succeeds or fails with probability ½, independently of the others. A success pays <span class="succ" id="succ-amt">+$2M</span>; a failure costs <span class="fail">−$1M</span>. Every sequence of outcomes is a path from the top of the lattice to a total at the bottom, and every path is equally likely. So the probability of a total is the number of paths reaching it, divided by 2<sup><em>n</em></sup>.</p>
+
+  <div class="controls">
+    <label>n
+      <select id="ln">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4" selected>4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value="9">9</option>
+        <option value="10">10</option>
+        <option value="11">11</option>
+        <option value="12">12</option>
+        <option value="13">13</option>
+        <option value="14">14</option>
+        <option value="15">15</option>
+        <option value="16">16</option>
+        <option value="17">17</option>
+        <option value="18">18</option>
+        <option value="19">19</option>
+        <option value="20">20</option>
+        <option value="21">21</option>
+        <option value="22">22</option>
+        <option value="23">23</option>
+        <option value="24">24</option>
+        <option value="25">25</option>
+        <option value="26">26</option>
+        <option value="27">27</option>
+        <option value="28">28</option>
+        <option value="29">29</option>
+        <option value="30">30</option>
+        <option value="31">31</option>
+        <option value="32">32</option>
+        <option value="33">33</option>
+        <option value="34">34</option>
+        <option value="35">35</option>
+        <option value="36">36</option>
+        <option value="37">37</option>
+        <option value="38">38</option>
+        <option value="39">39</option>
+        <option value="40">40</option>
+        <option value="41">41</option>
+        <option value="42">42</option>
+        <option value="43">43</option>
+        <option value="44">44</option>
+        <option value="45">45</option>
+        <option value="46">46</option>
+        <option value="47">47</option>
+        <option value="48">48</option>
+        <option value="49">49</option>
+        <option value="50">50</option>
+        <option value="51">51</option>
+        <option value="52">52</option>
+        <option value="53">53</option>
+        <option value="54">54</option>
+        <option value="55">55</option>
+        <option value="56">56</option>
+        <option value="57">57</option>
+        <option value="58">58</option>
+        <option value="59">59</option>
+        <option value="60">60</option>
+        <option value="61">61</option>
+        <option value="62">62</option>
+        <option value="63">63</option>
+        <option value="64">64</option>
+        <option value="65">65</option>
+        <option value="66">66</option>
+        <option value="67">67</option>
+        <option value="68">68</option>
+        <option value="69">69</option>
+        <option value="70">70</option>
+        <option value="71">71</option>
+        <option value="72">72</option>
+        <option value="73">73</option>
+        <option value="74">74</option>
+        <option value="75">75</option>
+        <option value="76">76</option>
+        <option value="77">77</option>
+        <option value="78">78</option>
+        <option value="79">79</option>
+        <option value="80">80</option>
+        <option value="81">81</option>
+        <option value="82">82</option>
+        <option value="83">83</option>
+        <option value="84">84</option>
+        <option value="85">85</option>
+        <option value="86">86</option>
+        <option value="87">87</option>
+        <option value="88">88</option>
+        <option value="89">89</option>
+        <option value="90">90</option>
+        <option value="91">91</option>
+        <option value="92">92</option>
+        <option value="93">93</option>
+        <option value="94">94</option>
+        <option value="95">95</option>
+        <option value="96">96</option>
+        <option value="97">97</option>
+        <option value="98">98</option>
+        <option value="99">99</option>
+        <option value="100">100</option>
+      </select>
+    </label>
+    <button id="lnext" class="primary">Next sequence</button>
+    <button id="lall">Play all</button>
+    <button id="lreset">Reset</button>
+    <label>Payoff
+      <select id="payoff">
+        <option value="2" selected>+$2M / −$1M</option>
+        <option value="1">+$1M / −$1M</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="normal" checked> Normal curve, same mean and SD</label>
+    <label>Speed
+      <input type="range" id="speed" min="0.3" max="2" step="0.1" value="1">
+    </label>
+  </div>
+
+  <div class="stage">
+    <svg id="lattice" role="img" aria-label="All sequences of project outcomes as paths through a lattice"></svg>
+  </div>
+  <div class="stage">
+    <svg id="dist" role="img" aria-label="Probability of each total, with a normal approximation"></svg>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--bar)"></span>P(S<sub>n</sub> = total)</span>
+      <span><span class="sw" style="background:var(--hi)"></span>selected total</span>
+      <span><span class="sw" style="background:var(--normal);height:3px;border-radius:0"></span>N(nμ, nσ²), <span id="mu-sd">μ = 0.5, σ = 1.5</span></span>
+    </div>
+  </div>
+  <div class="phase chipcap" id="lcap">&nbsp;</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+(function(){
+const OUT = [{v:-1, name:'F', color:'var(--fail)'}, {v:2, name:'S', color:'var(--succ)'}];
+let SUCC = 2, FAIL = -1, STEP = 3;
+function setPayoff(succ){
+  SUCC = succ; FAIL = -1; STEP = SUCC - FAIL; OUT[1].v = SUCC; OUT[0].v = FAIL;
+  document.getElementById('succ-amt').textContent = `+$${SUCC}M`;
+  document.getElementById('mu-sd').textContent = `μ = ${(SUCC+FAIL)/2}, σ = ${STEP/2}`;
+}
+const svg = d3.select('#lattice');
+const W = 1000, M = {t:18, r:40, b:16, l:40};
+const iw = W - M.l - M.r;
+const CH = 13, CW = 11;
+const g = svg.append('g').attr('transform',`translate(${M.l},${M.t})`).attr('class','lat');
+const gEdges = g.append('g'), gHi = g.append('g'), gCur = g.append('g'), gNodes = g.append('g'), gChips = g.append('g'), gLab = g.append('g'), gHit = g.append('g');
+const x = d3.scaleLinear().range([0, iw]);
+let n = 4, seqIdx = 0, edgeUse, chipRows, busy = false, running = false, pinned = null, lastCap = '', visited;
+let LH = 40, R = 12;
+const annotate = () => n <= 12;
+let hiLines = [], wCache = new Map(), hoverReq = null, hoverT = undefined, hovering = false;
+const UNVISITED = 0.45;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const dur = ms => reduced ? 0 : ms / +document.getElementById('speed').value;
+const ny = k => k*LH + R;
+const stackTop = () => ny(n) + R + 34;
+const fmtT = t => d3.format('+d')(t).replace('+0','0');
+const fmtD = t => t<0 ? `−$${-t}M` : t===0 ? '$0' : `+$${t}M`;
+const fmtP = p => p >= 0.0005 ? d3.format('.3f')(p).replace(/^0/,'') : '<.001';
+const fmtC = v => v < 10000 ? String(v) : d3.format('.3~s')(v);
+const comb = (a,b) => { if (b<0||b>a) return 0; let r=1; for (let i=1;i<=b;i++) r = r*(a-b+i)/i; return Math.round(r); };
+const succOf = (k,t) => Math.round((t - k*FAIL)/STEP);                 // successes needed to sit at total t after k steps
+const countAt = (k,t) => comb(k, succOf(k,t));   // paths from start to (k,t)
+const boxes = () => n <= 5, drawPaths = () => n <= 8, nodeText = () => n <= 12, sequential = () => n <= 6;
+const totalsAt = k => d3.range(0,k+1).map(j => STEP*j + k*FAIL);
+const eid = (k,t,o) => `e${k}_${t}_${o.name}`.replace('-','m');
+const cid = (k,t) => `c${k}_${t}`.replace('-','m');
+const rowOpacity = i => visited.has(i) ? 1 : UNVISITED;
+
+function layout(){
+  LH = n <= 8 ? 40 : n <= 12 ? 34 : n <= 23 ? 28 : n <= 35 ? 20 : n <= 50 ? 15 : n <= 75 ? 11 : 8;
+  R  = n <= 8 ? 12 : n <= 12 ? 11 : n <= 23 ? 9 : n <= 35 ? 6 : n <= 50 ? 4.5 : n <= 75 ? 3 : 2.2;
+  x.domain([n*FAIL - STEP/2, n*SUCC + STEP/2]);
+  const maxStack = comb(n, Math.floor(n/2));
+  const H = M.t + (boxes() ? stackTop() + maxStack*CH : ny(n) + R + (annotate() ? 38 : 10)) + M.b;
+  svg.attr('viewBox', `0 0 ${W} ${H}`);
+  for (const gg of [gEdges,gHi,gCur,gNodes,gChips,gLab,gHit]) gg.selectAll('*').remove();
+  pinned = null; edgeUse = new Map(); chipRows = new Map(); visited = new Set();
+  for (let k=0;k<n;k++) for (const t of totalsAt(k)) for (const o of OUT){
+    edgeUse.set(eid(k,t,o), 0);
+    gEdges.append('line').attr('id',eid(k,t,o))
+      .attr('x1',x(t)).attr('y1',ny(k)).attr('x2',x(t+o.v)).attr('y2',ny(k+1))
+      .attr('stroke',o.color).attr('stroke-opacity',0.18).attr('stroke-width', n<=23 ? 1 : n<=50 ? 0.7 : 0.45).attr('stroke-linecap','round');
+  }
+  hiLines = []; wCache = new Map();
+  if (!drawPaths()){
+    const frag = document.createDocumentFragment();
+    for (let k=0;k<n;k++) for (const tt of totalsAt(k)) for (const o of OUT){
+      const el = document.createElementNS('http://www.w3.org/2000/svg','line');
+      el.setAttribute('x1',x(tt)); el.setAttribute('y1',ny(k)); el.setAttribute('x2',x(tt+o.v)); el.setAttribute('y2',ny(k+1));
+      el.setAttribute('stroke',o.color); el.setAttribute('stroke-opacity','0.85'); el.setAttribute('stroke-linecap','round'); el.setAttribute('stroke-width','0');
+      frag.appendChild(el); hiLines.push({el,k,tt,o});
+    }
+    gHi.node().appendChild(frag);
+  }
+  const fs = n <= 8 ? 10.5 : n <= 12 ? 9 : 8;
+  for (let k=0;k<=n;k++){
+    if (n <= 12 || (n <= 23 && k % 5 === 0) || (n <= 50 && k % 10 === 0) || k % 25 === 0 || k === n)
+      gLab.append('text').attr('class','rowlab').attr('x',-M.l+4).attr('y',ny(k)+3.5).text(k===0?'start':`after ${k}`);
+    for (const t of totalsAt(k)){
+      const c = countAt(k,t);
+      const gn = gNodes.append('g').attr('transform',`translate(${x(t)},${ny(k)})`);
+      gn.append('circle').attr('r',R).attr('fill','var(--panel)').attr('stroke','var(--rule)').attr('stroke-width', n<=23 ? 1.2 : n<=50 ? 0.8 : 0.5);
+      if (nodeText()) gn.append('text').attr('class','nodecount').attr('id',cid(k,t)).attr('text-anchor','middle').attr('y',fs*0.35)
+        .attr('font-size',fs).attr('fill', k===n?'var(--ink)':'var(--muted)').text(c);
+      gn.append('title').text(`after ${k}: total ${fmtD(t)} · ${c.toLocaleString()} of ${(2**k).toLocaleString()} sequences`);
+    }
+  }
+  // terminal totals under the last row
+  const lfs = n<=8 ? 10 : 9;
+  if (annotate()) for (const t of totalsAt(n)){
+    gLab.append('text').attr('class','axlab').attr('x',x(t)).attr('y',ny(n)+R+11).attr('text-anchor','middle')
+      .attr('font-size', lfs).attr('fill','var(--ink)').text(fmtD(t));
+    gLab.append('text').attr('class','axlab').attr('x',x(t)).attr('y',ny(n)+R+22).attr('text-anchor','middle')
+      .attr('font-size', lfs).text('Prob = ' + fmtP(countAt(n,t)/2**n));
+  }
+  if (boxes()){
+    gLab.append('line').attr('class','base').attr('x1',0).attr('x2',iw).attr('y1',ny(n)+R+28).attr('y2',ny(n)+R+28);
+    for (let idx=0; idx<2**n; idx++){
+      const outs = d3.range(n).map(i => OUT[(idx >> (n-1-i)) & 1]);
+      const tt = d3.sum(outs, o=>o.v);
+      const row = chipRows.get(tt)||0; chipRows.set(tt, row+1);
+      const gr = gChips.append('g').attr('data-t',tt).attr('data-idx',idx).attr('opacity',UNVISITED)
+        .attr('transform',`translate(${x(tt)-n*CW/2},${stackTop()+row*CH})`);
+      gr.selectAll('rect').data(outs).join('rect').attr('x',(d,i)=>i*CW).attr('width',CW-2).attr('height',CH-2).attr('rx',2).attr('fill',d=>d.color);
+    }
+  }
+  const colW = x(STEP)-x(0), H2 = H - M.t - M.b;
+  for (const t of totalsAt(n)){
+    gHit.append('rect').attr('x',x(t)-colW/2).attr('y',ny(n)-R-2).attr('width',colW).attr('height',H2-(ny(n)-R-2))
+      .attr('fill','transparent').style('cursor','pointer')
+      .on('mouseenter', ()=>{ if (pinned===null) hover(t); })
+      .on('mouseleave', ()=>{ if (pinned===null) hover(null); })
+      .on('click', ()=>{ if (pinned===t){ pinned=null; clearPaths(); } else { pinned=t; showPaths(t); } });
+  }
+  bindDistHits();
+  drawDist();
+  seqIdx = 0; cap('');
+  d3.select('#lnext').attr('disabled',null).text(sequential() ? 'Next sequence' : 'Random sequence');
+  d3.select('#lall').style('display', sequential() ? '' : 'none');
+}
+function cap(s){ document.getElementById('lcap').innerHTML = s || '&nbsp;'; }
+function hover(t){            // t = total to show, or null to clear
+  hoverT = t;
+  if (hoverReq) return;
+  hoverReq = requestAnimationFrame(()=>{ hoverReq = null; if (hoverT===null) clearPaths(); else showPaths(hoverT); });
+}
+const chipHTML = o => `<span class="chip" style="background:${o.color}"></span>`;
+
+function showPaths(t){
+  if (drawPaths()) gHi.selectAll('*').interrupt().remove();
+  const j = succOf(n,t), m = comb(n,j);
+  gEdges.attr('opacity',0.25);
+  gChips.selectAll('g').transition().duration(dur(150)).attr('opacity', function(){ return +this.dataset.t===t ? 1 : 0.15; });
+  if (drawPaths()){
+    const seqs = d3.range(2**n).filter(i => d3.range(n).reduce((a,k)=>a+((i>>k)&1),0)===j);
+    const colW = x(STEP)-x(0), sp = Math.min(2.2, colW*0.6/Math.max(m,1));
+    seqs.forEach((idx,i)=>{
+      const dx = (i-(m-1)/2)*sp;
+      let tt = 0, px = x(0)+dx, py = ny(0);
+      for (let k=0;k<n;k++){
+        const o = OUT[(idx>>(n-1-k))&1]; tt += o.v;
+        const nx = x(tt)+dx, nyy = ny(k+1);
+        gHi.append('line').attr('x1',px).attr('y1',py).attr('x2',px).attr('y2',py)
+          .attr('stroke',o.color).attr('stroke-width',2.4).attr('stroke-opacity',0.9).attr('stroke-linecap','round')
+          .transition().delay(dur(i*Math.min(90, 1800/m)+k*110)).duration(dur(110)).ease(d3.easeLinear).attr('x2',nx).attr('y2',nyy);
+        px = nx; py = nyy;
+      }
+    });
+  } else {
+    // weighted edges: paths through the edge that end at total t. Widths are cached per total
+    // and applied straight to the DOM, no transitions, so hover stays cheap at large n.
+    let ws = wCache.get(t);
+    if (!ws){
+      const maxW = n <= 12 ? 9 : n <= 50 ? 6 : 4;
+      const raw = hiLines.map(e => { const s1 = succOf(e.k,e.tt) + (e.o.name==='S'?1:0); return countAt(e.k,e.tt) * comb(n-e.k-1, j-s1); });
+      const wmax = d3.max(raw);
+      ws = raw.map(w => w>0 ? 1 + maxW*Math.sqrt(w/wmax) : 0);
+      wCache.set(t, ws);
+    }
+    for (let i=0;i<hiLines.length;i++) hiLines[i].el.setAttribute('stroke-width', ws[i]);
+  }
+  selectBar(t);
+  if (!hovering) lastCap = document.getElementById('lcap').innerHTML;
+  hovering = true;
+  cap(`${m.toLocaleString()} of ${(2**n).toLocaleString()} sequences reach ${fmtD(t)} (probability ${fmtP(m/2**n)}): exactly ${j} success${j===1?'':'es'} and ${n-j} failure${n-j===1?'':'s'}, in any order${drawPaths()?'':' · edge width = number of those paths using that step'}${pinned===t?' &nbsp;(pinned, click to release)':''}`);
+}
+function clearPaths(){
+  hovering = false;
+  selectBar(null);
+  if (drawPaths()) gHi.selectAll('*').interrupt().remove();
+  else for (const e of hiLines) e.el.setAttribute('stroke-width','0');
+  gEdges.attr('opacity',1);
+  gChips.selectAll('g').transition().duration(dur(150)).attr('opacity', function(){ return rowOpacity(+this.dataset.idx); });
+  cap(lastCap);
+}
+
+
+// ---- linked distribution panel ----
+const dsvg = d3.select('#dist');
+const DH = 210, DM = {t:26, b:40};
+const dg = dsvg.append('g').attr('transform',`translate(${M.l},${DM.t})`);
+const dGrid = dg.append('g'), dBars = dg.append('g'), dHit = dg.append('g');
+const dNormal = dg.append('path').attr('fill','none').attr('stroke','var(--normal)').attr('stroke-width',2);
+const dX = dg.append('g').attr('class','axis').attr('transform',`translate(0,${DH})`);
+const dY = dg.append('g').attr('class','axis');
+const dLab = dg.append('text').attr('class','axlab').attr('text-anchor','middle').attr('font-size',11).attr('fill','var(--ink)').attr('font-weight',500);
+dg.append('text').attr('class','axlabel').attr('x',iw).attr('y',DH+34).attr('text-anchor','end').text('total payoff ($M)');
+dg.append('text').attr('class','axlabel').attr('x',-M.l+6).attr('y',-10).text('probability');
+const y = d3.scaleLinear().range([DH, 0]);
+const barW = () => Math.min(7, (x(STEP)-x(0))*0.5);
+
+function drawDist(){
+  dsvg.attr('viewBox', `0 0 ${W} ${DM.t+DH+DM.b}`);
+  const probs = totalsAt(n).map(t => ({t, p: countAt(n,t)/2**n}));
+  y.domain([0, d3.max(probs, d=>d.p)*1.1]);
+  dGrid.selectAll('line').data(y.ticks(4)).join('line').attr('class','gridline').attr('x1',0).attr('x2',iw).attr('y1',v=>y(v)).attr('y2',v=>y(v));
+  dBars.selectAll('rect').data(probs, d=>d.t).join('rect')
+    .attr('x', d=>x(d.t)-barW()/2).attr('width', barW()).attr('y', d=>y(d.p)).attr('height', d=>DH-y(d.p)).attr('fill','var(--bar)');
+  dX.call(d3.axisBottom(x).ticks(12).tickFormat(v=>fmtT(v)));
+  dY.call(d3.axisLeft(y).ticks(4).tickFormat(d3.format('.2f')));
+  drawNormal();
+  dLab.text('');
+}
+function drawNormal(){
+  const on = document.getElementById('normal').checked;
+  const m = (SUCC+FAIL)/2*n, sd = STEP/2*Math.sqrt(n);
+  const [a,b] = x.domain();
+  const pts = d3.range(a, b, (b-a)/300).map(v => [v, STEP*Math.exp(-0.5*((v-m)/sd)**2)/(sd*Math.sqrt(2*Math.PI))]);
+  dNormal.attr('d', d3.line().x(d=>x(d[0])).y(d=>y(Math.min(d[1], y.domain()[1])))(pts)).attr('opacity', on?1:0);
+}
+function selectBar(t){
+  dBars.selectAll('rect').attr('fill', d => d.t===t ? 'var(--hi)' : 'var(--bar)');
+  if (t===null){ dLab.text(''); return; }
+  const p = countAt(n,t)/2**n;
+  dLab.attr('x', Math.max(50, Math.min(iw-50, x(t)))).attr('y', y(p)-8).text(`${fmtD(t)} · Prob = ${fmtP(p)}`);
+}
+function pulseBar(t){
+  dBars.selectAll('rect').filter(d=>d.t===t).transition().duration(dur(200)).attr('fill','var(--hi)')
+    .transition().delay(dur(300)).duration(dur(300)).attr('fill', d => pinned===d.t ? 'var(--hi)' : 'var(--bar)');
+}
+function bindDistHits(){
+  const colW = x(STEP)-x(0);
+  dHit.selectAll('rect').data(totalsAt(n)).join('rect')
+    .attr('x', t=>x(t)-colW/2).attr('y',-DM.t).attr('width',colW).attr('height',DM.t+DH).attr('fill','transparent').style('cursor','pointer')
+    .on('mouseenter', (e,t)=>{ if (pinned===null) hover(t); })
+    .on('mouseleave', ()=>{ if (pinned===null) hover(null); })
+    .on('click', (e,t)=>{ if (pinned===t){ pinned=null; clearPaths(); } else { pinned=t; showPaths(t); } });
+}
+document.getElementById('normal').addEventListener('change', drawNormal);
+
+async function next(){
+  if (busy || (sequential() && seqIdx >= 2**n)) return; busy = true;
+  d3.selectAll('#lnext,#lreset,#ln,#payoff').attr('disabled',true);
+  const idx = sequential() ? seqIdx : Math.floor(Math.random()*2**n);
+  const outs = d3.range(n).map(i => OUT[(idx >> (n-1-i)) & 1]);
+  let t = 0; const pts = [[x(0), ny(0)]];
+  const segs = outs.map((o,k) => { const s = {k, t, o}; t += o.v; pts.push([x(t), ny(k+1)]); return s; });
+  cap(`${sequential() ? `sequence ${seqIdx+1} of ${2**n}` : 'a random sequence'} &nbsp; ${outs.map(chipHTML).join('')} &nbsp; total ${fmtD(t)}`);
+  for (let k=0;k<n;k++){
+    const [x1,y1] = pts[k], [x2,y2] = pts[k+1];
+    const ln = gCur.append('line').attr('x1',x1).attr('y1',y1).attr('x2',x1).attr('y2',y1)
+      .attr('stroke',segs[k].o.color).attr('stroke-width', n<=50 ? 3.5 : 2).attr('stroke-linecap','round');
+    await ln.transition().duration(dur(n<=8 ? 260 : n<=50 ? 120 : 45)).ease(d3.easeLinear).attr('x2',x2).attr('y2',y2).end();
+  }
+  for (const sg of segs){
+    const id = eid(sg.k, sg.t, sg.o); const u = edgeUse.get(id)+1; edgeUse.set(id,u);
+    d3.select('#'+id).transition().duration(dur(300))
+      .attr('stroke-width', 1 + 1.6*Math.min(u,6)).attr('stroke-opacity', Math.min(0.75, 0.18 + 0.12*u));
+  }
+  if (boxes()){
+    visited.add(idx);
+    const gr = gChips.select(`g[data-idx="${idx}"]`);
+    const flash = gr.append('rect').attr('x',-3).attr('y',-3).attr('width',n*CW+4).attr('height',CH+4).attr('rx',3)
+      .attr('fill','none').attr('stroke','var(--ink)').attr('stroke-width',1.5);
+    pulseBar(t);
+    await gr.transition().duration(dur(200)).attr('opacity',1).end();
+    await flash.transition().delay(dur(250)).duration(dur(300)).attr('opacity',0).remove().end();
+  } else {
+    const term = gNodes.selectAll('g').filter((d,i,nodes)=>{ const tr = nodes[i].getAttribute('transform'); return tr===`translate(${x(t)},${ny(n)})`; }).select('circle');
+    pulseBar(t);
+    await term.transition().duration(dur(200)).attr('stroke','var(--ink)').attr('stroke-width',2.5)
+      .transition().delay(dur(300)).duration(dur(300)).attr('stroke','var(--rule)').attr('stroke-width', n<=23 ? 1.2 : 0.8).end();
+  }
+  await gCur.selectAll('line').transition().duration(dur(250)).attr('opacity',0).remove().end();
+  if (sequential()) seqIdx += 1;
+  busy = false;
+  d3.selectAll('#lnext,#lreset,#ln,#payoff').attr('disabled',null);
+  if (sequential() && seqIdx >= 2**n){ d3.select('#lnext').attr('disabled',true); cap(`all ${2**n} sequences walked.${boxes()?" Each stack's height is the count above it.":''}`); }
+}
+async function all(){
+  if (running){ running=false; return; }
+  running = true; document.getElementById('lall').textContent = 'Stop';
+  while (running && seqIdx < 2**n){ await next(); await new Promise(r=>setTimeout(r, dur(120))); }
+  running = false; document.getElementById('lall').textContent = 'Play all';
+}
+document.getElementById('lnext').addEventListener('click', next);
+document.getElementById('lall').addEventListener('click', all);
+document.getElementById('lreset').addEventListener('click', ()=>{ running=false; layout(); });
+document.getElementById('ln').addEventListener('change', e=>{ n = +e.target.value; running=false; layout(); });
+document.getElementById('payoff').addEventListener('change', e=>{ setPayoff(+e.target.value); running=false; layout(); });
+layout();
+})();
+</script>
+</body>
+</html>
