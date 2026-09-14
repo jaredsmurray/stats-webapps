@@ -8,12 +8,10 @@
 # means -- the bootstrap approximation to the sampling distribution of the
 # sample mean -- with an optional CLT overlay N(x-bar, s^2/n).
 #
-# Written in base graphics only so the identical file can be embedded in the
-# shinylive page sap_bootstrap_app.qmd (the site's shinylive bundle can only
-# include CRAN packages, and this project's ggplot2 is a GitHub install).
-# Keep this file and the chunk in sap_bootstrap_app.qmd in sync by hand.
+# The browser page reads this file during rendering, so it is the maintained
+# browser implementation as well as the native base-graphics app.
 #
-# Run locally with shiny::runApp("webapps/sap_bootstrap_app").
+# Run locally with shiny::runApp("apps/sap_bootstrap/app.R").
 
 library(shiny)
 library(bslib)
@@ -49,8 +47,8 @@ mark_color   <- "#CC0000"   # red X marking the current resample mean
 
 # --- Grid panels --------------------------------------------------------
 # Both grid panels draw 81 tiles in a 9 x 9 grid, each tile labeled with a
-# firm's index (bold) and its ROE, leaving a right-hand strip for the stats.
-GRID_XMAX <- 13.2
+# firm's index (bold) and its ROE. Statistics appear in the card footer.
+GRID_XMAX <- 9
 
 draw_grid <- function(idx, fill, text_col) {
   par(mar = c(0.3, 0.3, 0.3, 0.3))
@@ -63,35 +61,29 @@ draw_grid <- function(idx, fill, text_col) {
   yt <- 9 - rr - 0.05; yb <- 9 - rr - 0.95
   rect(xl, yb, xr, yt, col = fill, border = "white")
   text((xl + xr) / 2, yb + 0.60, labels = idx,
-       cex = 0.85, font = 2, col = text_col)
+       cex = 1.08, font = 2, col = text_col)
   text((xl + xr) / 2, yb + 0.26, labels = sprintf("%.1f", SAP_ROE[idx]),
-       cex = 0.68, col = text_col)
-}
-
-grid_stats <- function(lines, note = NULL) {
-  text(9.35, 8.85, paste(lines, collapse = "\n"), adj = c(0, 1),
-       cex = 1.05, font = 2, col = "gray20")
-  if (!is.null(note)) {
-    text(9.35, 5.6, paste(note, collapse = "\n"), adj = c(0, 1),
-         cex = 0.95, col = "gray35")
-  }
+       cex = 0.84, col = text_col)
 }
 
 ui <- page_sidebar(
-  title = "The Bootstrap — SAP Customer ROE",
+  title = "Bootstrap distributions: SAP customer ROE",
 
   tags$head(
     tags$style(HTML("
       * { font-family: 'Arial', 'Helvetica', sans-serif !important; }
+      .bslib-page-main { min-width: 0 !important; }
+      #sample_plot, #sample_plot img,
+      #resample_plot, #resample_plot img { min-height: 360px !important; }
+      #dist_plot, #dist_plot img { min-height: 300px !important; }
     "))
   ),
 
   sidebar = sidebar(
     width = 300,
 
-    p(style = "font-size: 0.92em; margin-bottom: 6px;",
-      "Each resample draws n = 81 firms from the 81 observed firms,",
-      strong("with replacement.")),
+    p(style = "font-size: 0.92em; margin-bottom: 10px;",
+      "Each resample draws 81 firms with replacement from the observed sample."),
 
     div(
       style = "margin-top: 4px;",
@@ -99,11 +91,11 @@ ui <- page_sidebar(
                    class = "btn-primary",
                    style = "margin-bottom: 5px; width: 100%;"),
       div(
-        style = "display: flex; gap: 5px; margin-bottom: 5px;",
-        numericInput("k", label = NULL, value = 50, min = 1, max = 10000,
-                     width = "80px"),
+        style = "margin-bottom: 10px;",
+        numericInput("k", label = "Number of resamples", value = 50,
+                     min = 1, max = 10000, width = "100%"),
         actionButton("draw_many", "Draw many resamples",
-                     style = "flex: 1;")
+                     style = "width: 100%;")
       ),
       actionButton("clear", "Clear history",
                    class = "btn-outline-secondary",
@@ -121,34 +113,52 @@ ui <- page_sidebar(
                   value = TRUE),
 
     hr(style = "margin: 10px 0;"),
-    checkboxInput("show_normal", "Show CLT normal approximation",
+    checkboxInput("show_normal", "Show normal approximation",
                   value = FALSE),
 
-    sliderInput("bw_means", "Bin width (resample means, % points):",
+    sliderInput("bw_means", "Bin width (percentage points):",
                 min = 0.1, max = 5, value = 0.5, step = 0.1,
                 ticks = FALSE)
   ),
 
   layout_columns(
     col_widths = c(12),
+    fill = FALSE,
+    fillable = FALSE,
 
     card(
-      card_header("The observed sample: 81 firms, numbered by index, with ROE (%)"),
-      plotOutput("sample_plot", height = "300px")
+      card_header("Observed sample: 81 firms with ROE (%)"),
+      card_body(plotOutput("sample_plot", height = "360px", fill = FALSE),
+                fill = FALSE),
+      card_footer(
+        style = "font-size: 0.9em;",
+        textOutput("sample_stats"),
+        textOutput("sample_note")
+      ),
+      fill = FALSE
     ),
 
     card(
       card_header("Current bootstrap resample (81 draws with replacement)"),
-      plotOutput("resample_plot", height = "300px")
+      card_body(plotOutput("resample_plot", height = "360px", fill = FALSE),
+                fill = FALSE),
+      card_footer(
+        style = "font-size: 0.9em;",
+        textOutput("resample_stats"),
+        textOutput("resample_note")
+      ),
+      fill = FALSE
     ),
 
     card(
       card_header("Bootstrap distribution of the resample mean"),
-      plotOutput("dist_plot", height = "280px"),
+      card_body(plotOutput("dist_plot", height = "300px", fill = FALSE),
+                fill = FALSE),
       card_footer(
         style = "font-size: 0.9em;",
         textOutput("n_resamples")
-      )
+      ),
+      fill = FALSE
     )
   )
 )
@@ -187,7 +197,14 @@ server <- function(input, output, session) {
   # Draw many: fast path for the bulk (means only), plus one full draw so the
   # grid panels have something to show.
   observeEvent(input$draw_many, {
-    k <- max(1, min(10000, round(input$k)))
+    k <- input$k
+    if (length(k) != 1L || !is.numeric(k) || !is.finite(k)) {
+      showNotification("Enter a number of resamples from 1 to 10,000.",
+                       type = "warning")
+      return()
+    }
+    k <- max(1, min(10000, round(k)))
+    updateNumericInput(session, "k", value = k)
     if (k > 1) {
       bulk <- colMeans(matrix(sample(SAP_ROE, N_S * (k - 1), replace = TRUE),
                               nrow = N_S))
@@ -206,21 +223,28 @@ server <- function(input, output, session) {
       drawn <- idx %in% values$current_idx
       fill  <- ifelse(drawn, bar_color, out_color)
       tcol  <- ifelse(drawn, "white", "grey55")
-      note  <- c("Grey firms sit out of the", "current resample.")
     } else {
       fill <- bar_color
       tcol <- "white"
-      note <- NULL
     }
     draw_grid(idx, fill, tcol)
-    grid_stats(c(
+  })
+
+  output$sample_stats <- renderText({
+    paste(
       sprintf("Sample size (n) = %d", N_S),
       sprintf("Sample mean (x-bar) = %.1f%%", SAMP_MEAN),
-      sprintf("Sample SD (s) = %.1f%%", SAMP_SD),
-      "",
-      "The sample stands in",
-      "for the population."
-    ), note = note)
+      sprintf("Sample SD (s) = %.1f percentage points", SAMP_SD),
+      sep = "   |   "
+    )
+  })
+
+  output$sample_note <- renderText({
+    if (length(values$current_idx) > 0 && isTRUE(input$color_original)) {
+      "Grey firms are absent from this resample."
+    } else {
+      ""
+    }
   })
 
   # Middle panel: the current resample, duplicates in orange
@@ -239,13 +263,29 @@ server <- function(input, output, session) {
     dup    <- counts[as.character(disp)] > 1
     rs     <- SAP_ROE[disp]
     fill   <- if (input$color_resample) ifelse(dup, dup_color, bar_color) else bar_color
-    note   <- if (input$color_resample) c("Orange firms appear", "more than once.") else NULL
     draw_grid(disp, fill, "white")
-    grid_stats(c(
-      sprintf("Resample size (n) = %d", length(disp)),
+  })
+
+  output$resample_stats <- renderText({
+    idx <- values$current_idx
+    if (length(idx) == 0) {
+      return("")
+    }
+    rs <- SAP_ROE[idx]
+    paste(
+      sprintf("Resample size (n) = %d", length(idx)),
       sprintf("Resample mean = %.1f%%", mean(rs)),
-      sprintf("Resample SD = %.1f%%", sd(rs))
-    ), note = note)
+      sprintf("Resample SD = %.1f percentage points", sd(rs)),
+      sep = "   |   "
+    )
+  })
+
+  output$resample_note <- renderText({
+    if (length(values$current_idx) > 0 && isTRUE(input$color_resample)) {
+      "Orange firms appear more than once."
+    } else {
+      ""
+    }
   })
 
   # Bottom panel: histogram of resample means on the density scale, so the
@@ -262,25 +302,32 @@ server <- function(input, output, session) {
     m  <- values$mean_history
     bw <- input$bw_means
 
-    # Bins aligned so that the original sample mean falls on a bin boundary
+    # Bins aligned so that the original sample mean falls on a bin boundary.
     lo <- SAMP_MEAN - bw * ceiling((SAMP_MEAN - min(m)) / bw + 1)
     hi <- SAMP_MEAN + bw * ceiling((max(m) - SAMP_MEAN) / bw + 1)
     h  <- hist(m, breaks = seq(lo, hi, by = bw), plot = FALSE)
+
+    current_mean <- if (length(values$current_idx) > 0) {
+      mean(SAP_ROE[values$current_idx])
+    } else {
+      NA_real_
+    }
+    plot_xlim <- range(c(DIST_XLIM, h$breaks, m, current_mean), finite = TRUE)
 
     y_hi <- max(c(h$density,
                   if (input$show_normal) dnorm(SAMP_MEAN, SAMP_MEAN, SAMP_SE))) * 1.12
 
     par(mar = c(4.2, 4.2, 0.5, 0.5))
     plot(h, freq = FALSE, col = bar_color, border = "white", main = "",
-         xlim = DIST_XLIM, ylim = c(0, y_hi),
+         xlim = plot_xlim, ylim = c(0, y_hi),
          xlab = "Resample mean ROE (%)", ylab = "Density", axes = FALSE)
-    at <- pretty(DIST_XLIM, n = 6)
+    at <- pretty(plot_xlim, n = 6)
     axis(1, at = at, labels = paste0(at, "%"))
     axis(2)
     abline(v = SAMP_MEAN, col = mean_color, lty = 2, lwd = 2)
 
     if (input$show_normal) {
-      xs <- seq(DIST_XLIM[1], DIST_XLIM[2], length.out = 400)
+      xs <- seq(plot_xlim[1], plot_xlim[2], length.out = 400)
       lines(xs, dnorm(xs, SAMP_MEAN, SAMP_SE), col = normal_color, lwd = 2.5)
     }
 

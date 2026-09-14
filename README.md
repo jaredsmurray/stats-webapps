@@ -27,10 +27,11 @@ do not rename them.
 
 ## Publishing
 
-Only sampling and Thaler are currently approved for the website. Bootstrap and
-bagging are held for functionality and copy review. The render list in
-`_quarto.yml` contains only the approved pages. Preview held apps outside
-`_site/` so a subsequent publication cannot include those previews.
+Only sampling and Thaler are approved for website publication. Bootstrap and
+bagging remain unpublished and require separate release authorization. The
+render list in `_quarto.yml` contains only the approved pages. Preview held
+apps outside `_site/` so a subsequent publication cannot include those
+previews.
 
 ```
 quarto publish gh-pages
@@ -48,14 +49,34 @@ contain no separate copy of the app code. The sampling app also has a local
 ggplot variant in `apps/sap_sampling/app.R`. Keep its behavior and labels aligned
 with the browser version.
 
-Bootstrap and bagging still carry inline app code in their pages. Changes to
-those apps must also update their corresponding page chunks.
+The bootstrap page reads `apps/sap_bootstrap/app.R`, which is the maintained
+browser and native base-graphics implementation. The bagging page reads
+`apps/bagging/app_shinylive.R`; `apps/bagging/app.R` is its native ggplot2
+variant for local inspection. The QMD files contain only the shinylive wrapper,
+so app changes belong in those maintained R scripts.
 
 Run the app regression checks from the repository root:
 
 ```bash
 Rscript tests/app-regression.R
+Rscript tests/held-app-regression.R
 ```
+
+Build private previews of the held pages from a disposable project copy outside
+the repository. Copy `_quarto.yml`, `_extensions/`, the two held QMDs, and the
+maintained app scripts into `/absolute/path/to/disposable-project`, preserving
+their `apps/...` paths. In that copy, change only the temporary `_quarto.yml`
+render list to `sap_bootstrap.qmd` and `bagging.qmd` and set
+`project.output-dir` to `preview`, then run:
+
+```bash
+cd /absolute/path/to/disposable-project
+R_LIBS=/path/to/browser-library quarto render
+```
+
+The rendered files will be in `/absolute/path/to/disposable-project/preview/`.
+The held pages remain outside the publication render list. Publishing either
+one requires a separate release authorization after review.
 
 ## Browser build dependencies
 

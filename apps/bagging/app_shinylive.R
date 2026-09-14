@@ -1,12 +1,9 @@
 # Bagging a regression tree, one resample at a time — shinylive port
 #
-# Base-graphics port of app.R for shinylive: the site's shinylive bundle can
-# only include CRAN packages, and this project's ggplot2 is a GitHub install
-# (shiny, bslib, and rpart are all CRAN). Same data, layout, server logic,
-# and colors as app.R; only the plotting code differs.
-# Keep this file, app.R, and the chunk in bagging_app.qmd in sync by hand.
+# This base-graphics implementation is embedded by bagging.qmd. The native
+# ggplot2 variant lives in app.R and shares the simulation and UI behavior.
 #
-# Run locally with shiny::runApp("webapps/bagging_app/app_shinylive.R").
+# Run locally with shiny::runApp("apps/bagging/app_shinylive.R").
 
 library(shiny)
 library(bslib)
@@ -23,6 +20,23 @@ data <- data.frame(x = x, y = y)
 x_pred <- seq(0, 10, length.out = 200)
 Y_LIM  <- range(y) + c(-0.3, 0.3)
 MAX_K  <- 1000
+
+tree_axis_ticks <- function(total) {
+  upper <- max(10, total)
+  ticks <- pretty(c(1, upper), n = 6)
+  ticks <- ticks[is.finite(ticks) & ticks >= 1 & ticks <= upper]
+  spacing <- if (length(ticks) > 1) min(diff(ticks)) else max(1, upper - 1)
+  endpoint_gap <- 0.75 * spacing
+  if (!any(ticks == 1) && (total <= 10 || length(ticks) == 0 ||
+                           ticks[1] - 1 >= endpoint_gap)) {
+    ticks <- c(1, ticks)
+  }
+  if (!any(ticks == total) && total > 1 &&
+      (length(ticks) == 0 || total - max(ticks) >= endpoint_gap)) {
+    ticks <- c(ticks, total)
+  }
+  sort(unique(as.integer(ticks)))
+}
 
 # --- Colors -------------------------------------------------------------
 tree_color <- "#DE8F05"   # orange: the current tree's fit
@@ -48,21 +62,23 @@ fit_bagged_tree <- function(sampled_data) {
 }
 
 ui <- page_sidebar(
-  title = "Bagging a Regression Tree",
+  title = "Bagging regression trees",
 
   tags$head(
     tags$style(HTML("
       * { font-family: 'Arial', 'Helvetica', sans-serif !important; }
+      .bslib-page-main { min-width: 0 !important; }
+      #resample_plot, #resample_plot img,
+      #ensemble_plot, #ensemble_plot img { min-height: 350px !important; }
+      #oob_plot, #oob_plot img { min-height: 260px !important; }
     "))
   ),
 
   sidebar = sidebar(
     width = 300,
 
-    p(style = "font-size: 0.92em; margin-bottom: 6px;",
-      "Each resample draws n = 100 points from the 100 observed points,",
-      strong("with replacement,"), "and fits a regression tree to them.",
-      "The bagged fit averages all the trees so far."),
+    p(style = "font-size: 0.92em; margin-bottom: 10px;",
+      "The app uses a simulated dataset of 100 observations."),
 
     div(
       style = "margin-top: 4px;",
@@ -70,11 +86,11 @@ ui <- page_sidebar(
                    class = "btn-primary",
                    style = "margin-bottom: 5px; width: 100%;"),
       div(
-        style = "display: flex; gap: 5px; margin-bottom: 5px;",
-        numericInput("k", label = NULL, value = 50, min = 1, max = MAX_K,
-                     width = "80px"),
+        style = "margin-bottom: 10px;",
+        numericInput("k", label = "Number of trees", value = 50,
+                     min = 1, max = MAX_K, width = "100%"),
         actionButton("draw_many", "Take many resamples",
-                     style = "flex: 1;")
+                     style = "width: 100%;")
       ),
       actionButton("clear", "Clear history",
                    class = "btn-outline-secondary",
@@ -86,34 +102,44 @@ ui <- page_sidebar(
   ),
 
   layout_columns(
-    col_widths = c(4, 4, 4),
+    col_widths = breakpoints(
+      xs = c(12, 12, 12), sm = c(12, 12, 12), md = c(12, 12, 12),
+      lg = c(6, 6, 12)
+    ),
+    fill = FALSE,
+    fillable = FALSE,
 
     card(
       card_header("Current resample and its tree"),
-      plotOutput("resample_plot", height = "420px"),
+      card_body(plotOutput("resample_plot", height = "350px", fill = FALSE),
+                fill = FALSE),
       card_footer(
         style = "font-size: 0.85em;",
-        "Grey points excluded; black points sized proportional to number of copies."
-      )
+        "Grey points are absent from this resample. Larger points appear more often in this resample."
+      ),
+      fill = FALSE
     ),
 
     card(
       card_header("The ensemble and the bagged fit"),
-      plotOutput("ensemble_plot", height = "420px"),
+      card_body(plotOutput("ensemble_plot", height = "350px", fill = FALSE),
+                fill = FALSE),
       card_footer(
         style = "font-size: 0.85em;",
-        "Orange: individual trees (current one vivid). Green: their average."
-      )
+        "Orange: individual trees; current tree highlighted. Green: their average."
+      ),
+      fill = FALSE
     ),
 
     card(
       card_header("Out-of-bag error"),
-      plotOutput("oob_plot", height = "420px"),
+      card_body(plotOutput("oob_plot", height = "260px", fill = FALSE),
+                fill = FALSE),
       card_footer(
         style = "font-size: 0.85em;",
-        "Each point left out of a resample gets an honest prediction from",
-        "the trees that never saw it."
-      )
+        "OOB predictions average only trees fitted without that observation."
+      ),
+      fill = FALSE
     )
   )
 )
@@ -179,7 +205,15 @@ server <- function(input, output, session) {
 
   observeEvent(input$draw_one, add_trees(1))
   observeEvent(input$draw_many, {
-    add_trees(max(1, min(MAX_K, round(input$k))))
+    k <- input$k
+    if (length(k) != 1L || !is.numeric(k) || !is.finite(k)) {
+      showNotification("Enter a number of trees from 1 to 1,000.",
+                       type = "warning")
+      return()
+    }
+    k <- max(1, min(MAX_K, round(k)))
+    updateNumericInput(session, "k", value = k)
+    add_trees(k)
   })
 
   # Shared scaffold: the scatter axes every panel draws on
@@ -212,7 +246,7 @@ server <- function(input, output, session) {
     points(x[sampled], y[sampled], pch = 19, cex = cex_in,
            col = adjustcolor("black", 0.7))
     B <- ncol(values$pred_mat)
-    lines(x_pred, values$pred_mat[, B], col = tree_color, lwd = 2)
+    lines(x_pred, values$pred_mat[, B], type = "s", col = tree_color, lwd = 2)
   })
 
   # Panel 2: all trees so far, plus their average
@@ -225,14 +259,14 @@ server <- function(input, output, session) {
     open_panel()
     points(x, y, pch = 19, cex = 0.9, col = adjustcolor(data_color, 0.6))
     if (B > 1) {
-      matlines(x_pred, values$pred_mat[, -B, drop = FALSE],
+      matlines(x_pred, values$pred_mat[, -B, drop = FALSE], type = "s",
                col = adjustcolor(prev_color, 0.5), lty = 1, lwd = 1)
     }
-    lines(x_pred, values$pred_mat[, B], col = tree_color, lwd = 2)
-    lines(x_pred, rowMeans(values$pred_mat), col = bag_color, lwd = 4)
+    lines(x_pred, values$pred_mat[, B], type = "s", col = tree_color, lwd = 2)
+    lines(x_pred, rowMeans(values$pred_mat), type = "s", col = bag_color, lwd = 4)
   })
 
-  # Panel 3: OOB MSE against the number of trees, on a square-root x scale
+  # Panel 3: OOB MSE against the number of trees, on a linear x scale
   output$oob_plot <- renderPlot(width = safe_width("oob_plot"), {
     if (length(values$oob_mse) == 0) {
       par(mar = c(0.5, 0.5, 0.5, 0.5))
@@ -244,14 +278,15 @@ server <- function(input, output, session) {
     mse <- values$oob_mse
     Bs  <- seq_along(mse)
 
+    max_trees <- max(10, max(Bs))
+    tree_ticks <- tree_axis_ticks(max(Bs))
+
     par(mar = c(4.2, 4.2, 1.2, 0.8))
-    plot(sqrt(Bs), mse, type = "o", pch = 19, cex = 0.7,
+    plot(Bs, mse, type = "o", pch = 19, cex = 0.7,
          col = bag_color, lwd = 2, axes = FALSE,
          xlab = "Number of trees", ylab = "Out-of-bag MSE",
-         xlim = sqrt(c(1, max(10, max(Bs)))))
-    brks <- c(1, 5, 25, 100, 250, 500, 1000)
-    brks <- brks[brks <= max(10, max(Bs))]
-    axis(1, at = sqrt(brks), labels = brks)
+         xlim = c(1, max_trees))
+    axis(1, at = tree_ticks, labels = tree_ticks)
     axis(2)
     box(bty = "l")
   })
