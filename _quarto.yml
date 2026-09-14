@@ -5,6 +5,8 @@ project:
     - index.qmd
     - sap_sampling.qmd
     - thaler.qmd
+  resources:
+    - paths_to_a_payoff.html
 
 website:
   title: "Statistics Web Apps"

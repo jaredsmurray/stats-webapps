@@ -8,3 +8,4 @@ takes a few moments.
 
 - [Sampling distributions: SAP customer ROE](sap_sampling.qmd)
 - [Thaler's investment example](thaler.qmd)
+- [Paths to a payoff: counting the outcomes of independent projects](paths_to_a_payoff.html)
